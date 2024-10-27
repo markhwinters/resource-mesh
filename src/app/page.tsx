@@ -1,311 +1,428 @@
-/* eslint-disable */
-
 "use client"
+import React, { useState, useEffect, useCallback } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { 
+  Wifi, Package, MapPin, Signal, AlertCircle, 
+  Check, RefreshCcw, Radio, Clock, User
+} from 'lucide-react';
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, Share2, Package, Battery, Signal, AlertCircle, CheckCircle2, Radio, Bell } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+// Enhanced mock mesh network with better message handling
+class MockMeshNetwork {
+  constructor() {
+    this.listeners = new Map();
+    this.connected = false;
+    this.nodes = new Map();
+    this.messageId = 0;
+    this.mockNodeData();
+  }
 
-const ResourceMeshApp = () => {
-  // Enhanced state management with localStorage persistence
-  const [networkStatus, setNetworkStatus] = useState(() => {
-    return localStorage.getItem('networkStatus') || 'mesh';
-  });
-  const [activeTab, setActiveTab] = useState('nearby');
-  const [broadcasts, setBroadcasts] = useState(() => {
-    return JSON.parse(localStorage.getItem('broadcasts')) || [];
-  });
-  const [batteryLevel, setBatteryLevel] = useState(75);
+  mockNodeData() {
+    this.nodes.set(1, { 
+      num: 1, 
+      name: 'Alpha',
+      lastHeard: Date.now(), 
+      snr: 10, 
+      rssi: -50,
+      position: { lat: 37.7749, lon: -122.4194 }
+    });
+    this.nodes.set(2, { 
+      num: 2, 
+      name: 'Beta',
+      lastHeard: Date.now(), 
+      snr: 8, 
+      rssi: -60,
+      position: { lat: 37.7748, lon: -122.4193 }
+    });
+  }
 
-  // Persist state changes to localStorage
-  useEffect(() => {
-    localStorage.setItem('networkStatus', networkStatus);
-    localStorage.setItem('broadcasts', JSON.stringify(broadcasts));
-  }, [networkStatus, broadcasts]);
-
-  const nearbyPeers = [
-    {
-      id: 1,
-      name: "Emergency Shelter A",
-      distance: "0.3km",
-      signalStrength: "strong",
-      batteryLevel: 85,
-      isRelay: true,
-      resources: ["Generator", "Water"]
-    },
-    {
-      id: 2,
-      name: "Medical Station B",
-      distance: "0.8km",
-      signalStrength: "medium",
-      batteryLevel: 45,
-      isRelay: false,
-      resources: ["Medical Supplies"]
-    },
-    {
-      id: 3,
-      name: "Supply Hub C",
-      distance: "1.2km",
-      signalStrength: "weak",
-      batteryLevel: 90,
-      isRelay: true,
-      resources: ["Food", "Water"]
-    }
-  ];
-
-  const resources = [
-    {
-      id: 1,
-      type: "Urgent Need",
-      item: "Portable Generator",
-      quantity: "1 unit",
-      location: "Emergency Shelter A",
-      status: "Unmatched",
-      priority: "high",
-      matchScore: 0.9
-    },
-    {
-      id: 2,
-      type: "Available",
-      item: "Drinking Water",
-      quantity: "50 gallons",
-      location: "Supply Hub C",
-      status: "Available",
-      priority: "medium",
-      matchScore: 0.7
-    },
-    {
-      id: 3,
-      type: "In Transit",
-      item: "First Aid Kits",
-      quantity: "10 kits",
-      location: "Medical Station B",
-      status: "Moving",
-      priority: "high",
-      matchScore: 0.85
-    }
-  ];
-
-  // Emergency broadcast functionality
-  const createBroadcast = () => {
-    const newBroadcast = {
-      id: Date.now(),
-      message: "Emergency Medical Supplies Needed at Shelter A",
-      priority: "high",
-      timestamp: new Date().toISOString(),
-      acknowledged: false
+  generateMockMessage(type = 'text') {
+    const types = ['text', 'position', 'data', 'emergency'];
+    const mockMessages = {
+      text: 'Test broadcast message',
+      position: 'Location update',
+      data: 'Sensor reading: 23.5C',
+      emergency: 'HELP NEEDED'
     };
-    setBroadcasts([newBroadcast, ...broadcasts]);
-  };
+    
+    const messageType = type || types[Math.floor(Math.random() * types.length)];
+    const fromNode = Array.from(this.nodes.values())[Math.floor(Math.random() * this.nodes.size)];
+    
+    return {
+      id: ++this.messageId,
+      type: messageType,
+      from: fromNode.name,
+      nodeId: fromNode.num,
+      text: mockMessages[messageType],
+      timestamp: Date.now(),
+      received: Date.now(),
+      rssi: fromNode.rssi,
+      snr: fromNode.snr,
+      hopCount: Math.floor(Math.random() * 3),
+      status: 'received',
+      priority: messageType === 'emergency' ? 'high' : 'normal'
+    };
+  }
 
-  const getSignalIcon = (strength) => {
-    switch(strength) {
-      case 'strong':
-        return <Signal className="w-4 h-4 text-green-500" />;
-      case 'medium':
-        return <Signal className="w-4 h-4 text-yellow-500" />;
-      case 'weak':
-        return <Signal className="w-4 h-4 text-red-500" />;
+  on(event, callback) {
+    this.listeners.set(event, callback);
+  }
+
+  connect() {
+    setTimeout(() => {
+      this.connected = true;
+      this.listeners.get('connected')?.();
+      
+      // Simulate periodic messages and updates
+      setInterval(() => {
+        if (Math.random() > 0.7) {
+          const message = this.generateMockMessage();
+          this.listeners.get('messageReceived')?.(message);
+        }
+        this.nodes.forEach((node) => {
+          node.lastHeard = Date.now();
+          this.listeners.get('nodeUpdated')?.(node);
+        });
+      }, 5000);
+    }, 1000);
+  }
+
+  disconnect() {
+    this.connected = false;
+    this.listeners.get('disconnected')?.();
+  }
+
+  async sendText(message) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const meshMessage = {
+          id: ++this.messageId,
+          type: 'text',
+          from: 'Local',
+          nodeId: 0,
+          text: message.text,
+          timestamp: Date.now(),
+          received: Date.now(),
+          rssi: -40,
+          snr: 12,
+          hopCount: 0,
+          status: 'sent',
+          priority: 'normal'
+        };
+        
+        this.listeners.get('messageReceived')?.(meshMessage);
+        resolve({ success: true, messageId: this.messageId });
+      }, 500);
+    });
+  }
+
+  isConnected() {
+    return this.connected;
+  }
+}
+
+const MessageItem = ({ message }) => {
+  const getMessageTypeIcon = (type) => {
+    switch (type) {
+      case 'emergency':
+        return <AlertCircle className="text-red-500" size={16} />;
+      case 'position':
+        return <MapPin className="text-green-500" size={16} />;
+      case 'data':
+        return <RefreshCcw className="text-blue-500" size={16} />;
       default:
-        return <Signal className="w-4 h-4" />;
+        return <Radio className="text-gray-500" size={16} />;
     }
   };
 
-  // Resource matching algorithm demo
-  const getMatchScore = (resource) => {
-    if (!resource.matchScore) return null;
-    const score = resource.matchScore * 100;
-    return (
-      <Badge variant={score > 80 ? 'success' : score > 60 ? 'secondary' : 'outline'}>
-        {score.toFixed(0)}% Match
-      </Badge>
-    );
+  const getStatusIndicator = (status) => {
+    switch (status) {
+      case 'sent':
+        return <Check className="text-green-500" size={14} />;
+      case 'received':
+        return <Clock className="text-blue-500" size={14} />;
+      default:
+        return null;
+    }
   };
 
   return (
-    <div className="w-full max-w-4xl p-4">
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Share2 className="w-6 h-6" />
-              Resource Mesh Network
-            </div>
-            <div className="flex items-center gap-4">
-              <Badge variant={networkStatus === 'mesh' ? 'success' : 'destructive'}>
-                {networkStatus === 'mesh' ? 
-                  <div className="flex items-center gap-1">
-                    <Wifi className="w-4 h-4" /> Mesh Active
-                  </div> : 
-                  <div className="flex items-center gap-1">
-                    <WifiOff className="w-4 h-4" /> Internet Down
-                  </div>
-                }
-              </Badge>
-              <Badge variant="outline">
-                <div className="flex items-center gap-1">
-                  <Battery className="w-4 h-4" /> {batteryLevel}%
-                </div>
-              </Badge>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
-            <Button 
-              variant={activeTab === 'nearby' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('nearby')}
-            >
-              Nearby Nodes
-            </Button>
-            <Button 
-              variant={activeTab === 'resources' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('resources')}
-            >
-              Resources
-            </Button>
-            <Button 
-              variant={activeTab === 'broadcasts' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('broadcasts')}
-            >
-              <Radio className="w-4 h-4 mr-2" />
-              Broadcasts
-            </Button>
-          </div>
-
-          {/* Emergency Broadcast Alert */}
-          {broadcasts.length > 0 && activeTab !== 'broadcasts' && (
-            <Alert className="mb-4">
-              <Bell className="w-4 h-4" />
-              <AlertDescription>
-                {broadcasts.length} active emergency broadcast{broadcasts.length !== 1 ? 's' : ''}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {activeTab === 'nearby' && (
-            <div className="space-y-4">
-              {nearbyPeers.map(peer => (
-                <Card key={peer.id} className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      {getSignalIcon(peer.signalStrength)}
-                      <div>
-                        <h3 className="font-semibold text-lg">{peer.name}</h3>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="outline">{peer.distance}</Badge>
-                          <Badge variant="secondary">
-                            <Battery className="w-4 h-4 mr-1" />
-                            {peer.batteryLevel}%
-                          </Badge>
-                          {peer.isRelay && (
-                            <Badge variant="success">Relay Node</Badge>
-                          )}
-                        </div>
-                        <div className="flex gap-2 mt-2">
-                          {peer.resources.map((resource, idx) => (
-                            <Badge key={idx} variant="outline">{resource}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <Button size="sm">Connect</Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'resources' && (
-            <div className="space-y-4">
-              {resources.map(resource => (
-                <Card key={resource.id} className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <Package className="w-6 h-6" />
-                      <div>
-                        <h3 className="font-semibold text-lg">{resource.item}</h3>
-                        <p className="text-gray-600">{resource.quantity} • {resource.location}</p>
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant={
-                            resource.type === 'Urgent Need' ? 'destructive' : 
-                            resource.type === 'Available' ? 'success' : 
-                            'secondary'
-                          }>
-                            {resource.type}
-                          </Badge>
-                          <Badge variant={resource.priority === 'high' ? 'destructive' : 'default'}>
-                            {resource.priority === 'high' ? 
-                              <AlertCircle className="w-4 h-4 mr-1" /> :
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                            }
-                            {resource.priority} priority
-                          </Badge>
-                          {getMatchScore(resource)}
-                        </div>
-                      </div>
-                    </div>
-                    <Button size="sm">
-                      {resource.type === 'Urgent Need' ? 'Offer Help' : 
-                       resource.type === 'Available' ? 'Request' : 
-                       'Track'}
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'broadcasts' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Emergency Broadcasts</h3>
-                <Button onClick={createBroadcast}>
-                  <Radio className="w-4 h-4 mr-2" />
-                  New Broadcast
-                </Button>
-              </div>
-              {broadcasts.map(broadcast => (
-                <Card key={broadcast.id} className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                        <h4 className="font-semibold">{broadcast.message}</h4>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-2">
-                        {new Date(broadcast.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                    <Badge variant={broadcast.acknowledged ? 'success' : 'destructive'}>
-                      {broadcast.acknowledged ? 'Acknowledged' : 'Unacknowledged'}
-                    </Badge>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          <Card className="mt-4 bg-blue-50">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-blue-600" />
-                <p className="text-blue-600 text-sm">
-                  Mesh network active with 3 direct connections and 12 nodes in range. 
-                  Estimated coverage: 2.5km radius. {networkStatus === 'mesh' ? 
-                    'All data synced locally.' : 
-                    'Operating in offline mode - data stored locally.'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </CardContent>
-      </Card>
+    <div className={`p-3 rounded-lg mb-2 ${
+      message.priority === 'high' ? 'bg-red-50' : 
+      message.type === 'position' ? 'bg-green-50' : 
+      'bg-gray-50'
+    }`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          {getMessageTypeIcon(message.type)}
+          <span className="font-medium">{message.from}</span>
+          <span className="text-xs text-gray-500">
+            Node {message.nodeId}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {getStatusIndicator(message.status)}
+          <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
+        </div>
+      </div>
+      
+      <div className="mt-1 ml-6">
+        {message.text}
+      </div>
+      
+      <div className="mt-1 ml-6 flex items-center gap-4 text-xs text-gray-500">
+        <span>RSSI: {message.rssi}dBm</span>
+        <span>SNR: {message.snr}dB</span>
+        <span>Hops: {message.hopCount}</span>
+      </div>
     </div>
   );
 };
 
-export default ResourceMeshApp;
+const MessagesTab = ({ client, connectionStatus, messages, setMessages }) => {
+  const [newMessage, setNewMessage] = useState('');
+  const [filter, setFilter] = useState('all');
+
+  const filteredMessages = messages.filter(msg => {
+    if (filter === 'all') return true;
+    return msg.type === filter;
+  });
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !client || !connectionStatus.isConnected) return;
+
+    try {
+      await client.sendText({
+        text: newMessage,
+        broadcast: true,
+        wantAck: true,
+      });
+      
+      setNewMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Mesh Network Messages</CardTitle>
+          <div className="flex gap-2">
+            <select 
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="p-1 text-sm border rounded"
+            >
+              <option value="all">All Messages</option>
+              <option value="text">Text</option>
+              <option value="position">Position</option>
+              <option value="data">Data</option>
+              <option value="emergency">Emergency</option>
+            </select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="h-96 overflow-y-auto border rounded p-2 bg-white">
+            {filteredMessages.length === 0 ? (
+              <div className="text-center text-gray-500 py-4">
+                No messages yet
+              </div>
+            ) : (
+              filteredMessages.map(msg => (
+                <MessageItem key={msg.id} message={msg} />
+              ))
+            )}
+          </div>
+          
+          <form onSubmit={handleSendMessage} className="flex gap-2">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="flex-1 p-2 border rounded"
+              placeholder="Type your message..."
+              disabled={!connectionStatus.isConnected}
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+              disabled={!connectionStatus.isConnected || !newMessage.trim()}
+            >
+              Broadcast
+            </button>
+          </form>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Main App Component
+const MeshNetwork = () => {
+  const [client, setClient] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState({
+    isConnected: false,
+    error: null,
+  });
+  const [nodes, setNodes] = useState(new Map());
+  const [messages, setMessages] = useState([]);
+  const [resources, setResources] = useState([
+    { id: 1, name: 'Water', status: 'available', priority: 'high', quantity: 50, location: 'Node-1' },
+    { id: 2, name: 'Medical Supplies', status: 'needed', priority: 'critical', quantity: 10, location: 'Node-2' },
+  ]);
+
+  const initializeMeshNetwork = useCallback(async () => {
+    try {
+      const mockClient = new MockMeshNetwork();
+      
+      mockClient.on('connected', () => {
+        setConnectionStatus({ isConnected: true, error: null });
+      });
+
+      mockClient.on('disconnected', () => {
+        setConnectionStatus({ isConnected: false, error: 'Disconnected from network' });
+      });
+
+      mockClient.on('nodeUpdated', (node) => {
+        setNodes(prev => new Map(prev).set(node.num, node));
+      });
+
+      mockClient.on('messageReceived', (message) => {
+        setMessages(prev => [...prev, message]);
+      });
+
+      mockClient.connect();
+      setClient(mockClient);
+    } catch (error) {
+      console.error('Failed to initialize mesh network:', error);
+      setConnectionStatus({ isConnected: false, error: error.message });
+    }
+  }, []);
+
+  useEffect(() => {
+    initializeMeshNetwork();
+    return () => {
+      if (client) {
+        client.disconnect();
+      }
+    };
+  }, [initializeMeshNetwork]);
+
+  // Network Status Tab Component
+  const NetworkTab = () => (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wifi className={connectionStatus.isConnected ? 'text-green-500' : 'text-red-500'} />
+            Connection Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Signal />
+              <span>{nodes.size} Active Nodes</span>
+            </div>
+            {connectionStatus.error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{connectionStatus.error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Network Nodes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {Array.from(nodes.values()).map((node) => (
+              <div key={node.num} className="flex items-center justify-between p-2 border rounded">
+                <div className="flex items-center gap-2">
+                  <MapPin className="text-blue-500" size={16} />
+                  {node.name} (Node {node.num})
+                </div>
+                <div className="text-sm">
+                  {node.lastHeard ? new Date(node.lastHeard).toLocaleTimeString() : 'Never'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Resources Tab Component
+  const ResourcesTab = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Available Resources</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {resources.map(resource => (
+            <div key={resource.id} className="flex items-center justify-between p-2 border rounded">
+              <div>
+                <Package className="inline mr-2" size={16} />
+                {resource.name}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-1 rounded text-sm ${
+                  resource.status === 'available' ? 'bg-green-100 text-green-800' :
+                  resource.status === 'needed' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {resource.status}
+                </span>
+                <span>{resource.quantity}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="p-4 max-w-4xl mx-auto">
+      <Tabs defaultValue="messages" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="network">Network</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsTrigger value="messages">Messages</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="network">
+          <NetworkTab />
+        </TabsContent>
+
+        <TabsContent value="resources">
+          <ResourcesTab />
+        </TabsContent>
+
+        <TabsContent value="messages">
+          <MessagesTab 
+            client={client}
+            connectionStatus={connectionStatus}
+            messages={messages}
+            setMessages={setMessages}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+export default MeshNetwork;
